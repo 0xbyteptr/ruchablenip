@@ -31,3 +31,5 @@ Kolory: CLI używa prostych kolorów ANSI do wyróżnienia komunikatów (zielone
 
 Proxy: lista proxy jest pobierana z powyższego URL i filtrowana (linia musi mieć format `host:port`). Proxy są używane cyklicznie dla zapytań.
 
+Telegram: konfiguracja jest umieszczona w `src/config.ts` — uzupełnij `tgToken` oraz `tgChat`, a CLI automatycznie będzie wysyłać powiadomienia przy każdym znalezieniu oraz podsumowanie po zakończeniu.
+

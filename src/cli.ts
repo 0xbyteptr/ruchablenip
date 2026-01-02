@@ -94,6 +94,25 @@ const colors = {
   cyan: (s: string) => `\x1b[36m${s}${colors.reset}`
 };
 
+// Telegram globals (populated from config)
+let TG_TOKEN: string | undefined;
+let TG_CHAT: string | undefined;
+
+async function sendTelegramMessage(text: string) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  try {
+    const url = `https://api.telegram.org/bot${encodeURIComponent(TG_TOKEN)}/sendMessage`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: "HTML" })
+    });
+  } catch (e) {
+    // ignore telegram errors
+  }
+}
+
+
 async function loadProxies(url: string): Promise<string[]> {
   try {
     const res = await fetch(url);
@@ -107,8 +126,26 @@ async function loadProxies(url: string): Promise<string[]> {
   }
 }
 
+import { config } from "./config.js";
+
 async function run() {
-  const opts = parseArgs();
+  const cliOpts = parseArgs();
+  // merge config defaults with CLI args (CLI overrides config)
+  const opts = {
+    attempts: typeof cliOpts.attempts !== 'undefined' ? cliOpts.attempts : config.attempts,
+    delayMs: typeof cliOpts.delayMs !== 'undefined' ? cliOpts.delayMs : config.delayMs,
+    reportEvery: typeof cliOpts.reportEvery !== 'undefined' ? cliOpts.reportEvery : config.reportEvery,
+    concurrency: typeof cliOpts.concurrency !== 'undefined' ? cliOpts.concurrency : config.concurrency,
+    useProxies: typeof cliOpts.useProxies !== 'undefined' ? cliOpts.useProxies : config.useProxies,
+    proxyUrl: typeof cliOpts.proxyUrl !== 'undefined' ? cliOpts.proxyUrl : config.proxyUrl,
+    tgToken: config.tgToken,
+    tgChat: config.tgChat
+  } as any;
+
+  // set telegram globals from config
+  if (opts.tgToken) TG_TOKEN = opts.tgToken;
+  if (opts.tgChat) TG_CHAT = opts.tgChat;
+
   let attempts = 0;
   let found = 0;
   let lastFound: Result | null = null;
@@ -134,6 +171,12 @@ async function run() {
     console.log(colors.cyan(`Pobieram listę proxy z ${opts.proxyUrl} ...`));
     proxies = await loadProxies(opts.proxyUrl);
     console.log(colors.cyan(`Znaleziono ${proxies.length} proxy`));
+  }
+
+  if (TG_TOKEN && TG_CHAT) {
+    console.log(colors.cyan(`Telegram aktywny, automatycznie wysyłam powiadomienia`));
+  } else {
+    console.log(colors.yellow(`Telegram wyłączony (brak konfiguracji w src/config.ts)`));
   }
 
   let running = true;
@@ -170,8 +213,11 @@ async function run() {
               found++;
               lastFound = result;
               await saveResultSafe(result);
-              console.log(`\n${colors.green("✅ ZNALEZIONO:")} ${result.nip} - ${result.nazwa}`);
-            } catch (err) {
+              console.log(`\n${colors.green("✅ ZNALEZIONO:")} ${result.nip} - ${result.nazwa}`);              // automatic Telegram send if configured (fire-and-forget)
+              (async () => {
+                const text = `✅ <b>Znaleziono</b>\nNIP: <code>${result.nip}</code>\n${result.nazwa}\nStatus: ${result.statusVat}${result.adres ? `\nAdres: ${result.adres}` : ""}`;
+                try { await sendTelegramMessage(text); } catch (_) {}
+              })();            } catch (err) {
               // ignore not found / API errors
             }
           }
